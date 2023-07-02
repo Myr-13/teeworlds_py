@@ -51,7 +51,7 @@ class Packet:
 			# Goto next chunk
 			packet = packet[b:]
 
-	def pack(self, chunks: List[Chunk]) -> bytes:
+	def pack(self, chunks: List[Chunk], token: bytes = b"\xFF\xFF\xFF\xFF") -> bytes:
 		self.chunks = chunks
 		chunks = b""
 
@@ -67,27 +67,33 @@ class Packet:
 				header.append(0)
 
 			header[0] = ((c.flags & 3) << 6) | ((c.size >> 4) & 0x3F)
-			header[1] = (c.size & 0xF)
+			header[1] = c.size & 0xF
 
 			if c.flags & 1:
-				self.ack = (self.ack + 1) % (1 << 10)
+				# self.ack = (self.ack + 1) % (1 << 10)
 
 				header[1] |= (self.ack >> 2) & 0xF0
 				header[2] = self.ack & 0xFF
-				header[0] = (((c.flags | 2) & 3) << 6) | ((c.size >> 4) & 0x3F)
+				header[0] = ((c.flags & 3) << 6) | ((c.size >> 4) & 0x3F)
 
 			# Pack chunk
-			chunks += bytes(2 * c.msgid + int(c.sys))
 			chunks += bytes(header)
+			# chunks += bytes(2 * c.msgid + int(c.sys))
+			c.add_int((c.msgid << 1) | int(c.sys))
 			chunks += c.raw
 
 		# Pack packet
+		# packet_header = [
+		# 	((self.flags << 4) & 0xF0) | ((self.ack >> 8) & 0xF),
+		# 	self.ack & 0xFF,
+		# 	len(self.chunks)
+		# ]
 		packet_header = [
-			((self.flags << 4) & 0xF0) | ((self.ack >> 8) & 0xF),
+			(self.flags << 2) | ((self.ack >> 8) & 0x3),
 			self.ack & 0xFF,
 			len(self.chunks)
 		]
 
-		packet = bytes(packet_header) + chunks
+		packet = bytes(packet_header) + chunks + token
 
 		return packet

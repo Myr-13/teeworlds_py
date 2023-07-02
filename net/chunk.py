@@ -51,7 +51,7 @@ class Chunk:
 
 			while True:
 				dst += 1
-				dst = i & (0x7f)
+				dst = i & 0x7F
 				i >>= 7
 				dst |= (int(i != 0)) << 7
 

@@ -1,15 +1,16 @@
-from typing import Union, Tuple
+from typing import Union, Tuple, List
 import socket
 import time
 import random
 
-from net.packet import *
+from net.packet import Packet, Chunk, Huffman
 from net.const import *
+from net.uuid_manager import UUIDManager
 
 
 def addr_to_tuple(s: str):
 	_s = s.split(":")
-	return (_s[0], int(_s[1]))
+	return _s[0], int(_s[1])
 
 
 class TwClient:
@@ -19,8 +20,24 @@ class TwClient:
 		self.ack = 0
 		self.tken = b"\xFF\xFF\xFF\xFF"
 		self.huffman = Huffman()
+		self.uuid_manager = UUIDManager()
 
-		self.socket.setblocking(True)
+		self.register_uuids()
+
+	def register_uuids(self):
+		self.uuid_manager.register_name("what-is@ddnet.tw", NETMSG_WHATIS)
+		self.uuid_manager.register_name("it-is@ddnet.tw", NETMSG_ITIS)
+		self.uuid_manager.register_name("i-dont-know@ddnet.tw", NETMSG_IDONTKNOW)
+
+		self.uuid_manager.register_name("rcon-type@ddnet.tw", NETMSG_RCON_TYPE)
+		self.uuid_manager.register_name("map-details@ddnet.tw", NETMSG_MAP_DETAILS)
+		self.uuid_manager.register_name("capabilities@ddnet.tw", NETMSG_CAPABILITIES)
+		self.uuid_manager.register_name("clientver@ddnet.tw", NETMSG_CLIENTVER)
+		self.uuid_manager.register_name("ping@ddnet.tw", NETMSG_PINGEX)
+		self.uuid_manager.register_name("pong@ddnet.tw", NETMSG_PONGEX)
+		self.uuid_manager.register_name("checksum-request@ddnet.tw", NETMSG_CHECKSUM_REQUEST)
+		self.uuid_manager.register_name("checksum-response@ddnet.tw", NETMSG_CHECKSUM_RESPONSE)
+		self.uuid_manager.register_name("checksum-error@ddnet.tw", NETMSG_CHECKSUM_ERROR)
 
 	def _send_raw_packet(self, data: bytes):
 		self.socket.sendto(data, self.server_address)
@@ -37,7 +54,8 @@ class TwClient:
 		packet = Packet()
 		packet.ack = self.ack
 		packet.flags = flags
-		self._send_raw_packet(packet.pack(msgs))
+		bytes_data = packet.pack(msgs, self.tken)
+		self._send_raw_packet(bytes_data)
 
 	def send_control_msg(self, msg_id: int, extra_msg: bytes = b""):
 		msg = [
@@ -84,7 +102,7 @@ class TwClient:
 				info.add_str("nameless bot")  # Name
 				info.add_str("no clan")  # Clan
 				info.add_int(-1)  # Country
-				info.add_string("default")  # Skin
+				info.add_str("default")  # Skin
 				info.add_int(0)  # Use custom colors
 				info.add_int(0)  # Color dody
 				info.add_int(0)  # Color feet
@@ -93,7 +111,7 @@ class TwClient:
 				crashmplex.add_str("crashmplex")
 
 				self.send_msg([info, crashmplex])
-			elif msg_id >= NETMSG_SNAP and msg_id <= NETMSG_SNAPSINGLE:
+			elif NETMSG_SNAP <= msg_id <= NETMSG_SNAPSINGLE:
 				pass
 
 	def _on_message(self, data: bytes):
@@ -105,21 +123,20 @@ class TwClient:
 			if data[3] == NET_CTRLMSG_CONNECTACCEPT:
 				self.tken = bytes(data[8:])
 
-				# Send 2 times cuz with 1 time server not responding
-				for i in range(2):
-					self.send_control_msg(3)  # Accept
+				self.send_control_msg(3)  # Accept
 
-				info = Chunk(1, True, 1)
+				info = Chunk(NETMSG_INFO, True, 1)
 				info.add_str("0.6 626fce9a778df4d4")  # Net version
 				info.add_str("")  # Password
 
 				ver = Chunk(0, True, 1)
-				ver.add_raw(b"\x8c\x00\x13\x04\x84\x61\x3e\x47\x87\x87\xf6\x72\xb3\x83\x5b\xd4")  # Idk what is it
+				ver.add_raw(b"\x8c\x00\x13\x04\x84\x61\x3e\x47\x87\x87\xf6\x72\xb3\x83\x5b\xd4")  # UUID
+				# ver.add_raw(self.uuid_manager.lookup_name("clientver@ddnet.tw").hash)
 				ver.add_raw(random.randbytes(16))
 				ver.add_int(16050)
 				ver.add_str("DDNet 16.5.0")
 
-				self.send_msg([info, ver])
+				self.send_msg([ver, info])
 			elif data[3] == NET_CTRLMSG_CLOSE:
 				print("disconnected")
 			elif data[3] == NET_CTRLMSG_KEEPALIVE:

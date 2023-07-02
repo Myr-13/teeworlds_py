@@ -13,6 +13,7 @@ remote_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 remote_socket.connect(remote_ip)
 print("Connected to remote host")
 
+
 # Main class
 class Server:
 	client_address = str
